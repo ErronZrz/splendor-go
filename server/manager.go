@@ -28,6 +28,7 @@ type GameManager struct {
 	ChatList    []*Chat
 	CreateTime  time.Time
 	Started     bool
+	ChangedChan map[int]chan bool
 }
 
 func NewGameManager(gameId string) *GameManager {
@@ -40,6 +41,7 @@ func NewGameManager(gameId string) *GameManager {
 		ChatList:    make([]*Chat, 0),
 		CreateTime:  time.Now(),
 		Started:     false,
+		ChangedChan: make(map[int]chan bool),
 	}
 }
 
@@ -60,9 +62,9 @@ func (m *GameManager) Poll(pid int) gin.H {
 	m.Changed[pid] = false
 
 	res := make(gin.H)
-	res["state"] = m.GamePtr
+	res["state"] = SerializeGame(m.GamePtr, pid)
 	res["result"] = make(gin.H)
-	res["chat"] = m.ChatList
+	res["chat"] = SerializeChatList(m.ChatList)
 
 	return res
 }
@@ -118,9 +120,9 @@ func (m *GameManager) Chat(pid int, msg string) gin.H {
 	})
 	m.doChange()
 	return gin.H{
-		"state":  m.GamePtr,
+		"state":  SerializeGame(m.GamePtr, pid),
 		"result": make(gin.H),
-		"chat":   m.ChatList,
+		"chat":   SerializeChatList(m.ChatList),
 	}
 }
 
@@ -144,7 +146,7 @@ func ValidatePlayer(pid int, playerUuid, gameUuid string) *GameManager {
 	if !exists {
 		return nil
 	}
-	if pid < 0 || pid >= res.GetPlayerNum() {
+	if pid < 0 || pid >= len(res.GamePtr.Players) {
 		return nil
 	} else if res.GamePtr.Players[pid].Uuid != playerUuid {
 		return nil

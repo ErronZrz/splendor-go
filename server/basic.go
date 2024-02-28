@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"math/rand"
 	"os"
+	"strings"
 )
 
 const (
@@ -32,11 +33,11 @@ var (
 	ColorList = []string{"W", "B", "G", "R", "K"}
 
 	ColorDict = map[string]string{
-		"W": "Diamond",
-		"B": "Sapphire",
-		"G": "Emerald",
-		"R": "Ruby",
-		"K": "Chocolate",
+		"W": "⚪",
+		"B": "🔵",
+		"G": "🟢",
+		"R": "🔴",
+		"K": "⚫",
 	}
 
 	SuggestWords = make([]string, 0)
@@ -52,9 +53,10 @@ type DevCard struct {
 }
 
 type Noble struct {
-	Uuid    string
-	Cost    map[string]int
-	Caption string
+	Uuid     string
+	Sequence int
+	Cost     map[string]int
+	Caption  string
 }
 
 func LoadCards() (l1, l2, l3 []*DevCard, nobles []*Noble) {
@@ -91,7 +93,7 @@ func LoadCards() (l1, l2, l3 []*DevCard, nobles []*Noble) {
 	}
 	for i := 0; i < NobleNum; i++ {
 		scanner.Scan()
-		nobles[i] = NewNoble(scanner.Text())
+		nobles[i] = NewNoble(i, scanner.Text())
 	}
 	return
 }
@@ -106,10 +108,13 @@ func NewDevCard(level int, color, line string) *DevCard {
 	if line[n-2] == '+' {
 		points = int(line[n-1] - '0')
 		line = line[:n-2]
+		n -= 2
 	}
 	// 再处理宝石
-	n -= 2
 	cost := make(map[string]int)
+	for _, c := range ColorList {
+		cost[c] = 0
+	}
 	for i := 0; i < n; i += 2 {
 		cost[line[i+1:i+2]] = int(line[i] - '0')
 	}
@@ -120,20 +125,24 @@ func NewDevCard(level int, color, line string) *DevCard {
 		Color:   color,
 		Points:  points,
 		Cost:    cost,
-		Caption: caption,
+		Caption: BeautifyCaption(caption),
 	}
 }
 
 // NewNoble 从字符串创建一个贵族
-func NewNoble(line string) *Noble {
+func NewNoble(seq int, line string) *Noble {
 	cost := make(map[string]int)
+	for _, c := range ColorList {
+		cost[c] = 0
+	}
 	for i := 0; i < len(line); i += 2 {
 		cost[line[i+1:i+2]] = int(line[i] - '0')
 	}
 	return &Noble{
-		Uuid:    uuid.New().String(),
-		Cost:    cost,
-		Caption: line,
+		Uuid:     uuid.New().String(),
+		Sequence: seq,
+		Cost:     cost,
+		Caption:  BeautifyCaption(line),
 	}
 }
 
@@ -160,4 +169,11 @@ func InitSuggestWords() {
 
 func GetRandomSuggestion() string {
 	return SuggestWords[rand.Intn(len(SuggestWords))]
+}
+
+func BeautifyCaption(line string) string {
+	for _, c := range ColorList {
+		line = strings.ReplaceAll(line, c, ColorDict[c])
+	}
+	return line
 }

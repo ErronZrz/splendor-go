@@ -22,13 +22,20 @@ type Player struct {
 }
 
 func NewPlayer(game *Game, id int, name string) *Player {
+	gems := make(map[string]int)
+	cards := make(map[string][]*DevCard)
+	for _, c := range ColorList {
+		gems[c] = 0
+		cards[c] = make([]*DevCard, 0)
+	}
+
 	return &Player{
 		Id:       id,
 		Name:     name,
 		Uuid:     uuid.New().String(),
 		Game:     game,
-		Gems:     make(map[string]int),
-		Cards:    make(map[string][]*DevCard),
+		Gems:     gems,
+		Cards:    cards,
 		Reserved: make([]*DevCard, 0),
 		Nobles:   make([]*Noble, 0),
 		Points:   0,
@@ -54,8 +61,8 @@ func (p *Player) Take(color string) string {
 		return "You have already acted"
 	} else if p.TotalGems() >= MaxGems {
 		return "You already have 10 gems"
-	} else if color == "*" {
-		return "You can't take a gold"
+	} else if color == GoldKey {
+		return "You can't take a 🟡"
 	} else if p.Game.Gems[color] == 0 {
 		return fmt.Sprintf("No %s left", ColorDict[color])
 	} else if p.Taken[color] == 1 && p.Game.Gems[color] < 3 {
@@ -75,9 +82,9 @@ func (p *Player) Take(color string) string {
 
 // Discard 丢弃宝石
 func (p *Player) Discard(color string) string {
-	if color == "*" {
+	if color == GoldKey {
 		if p.Golds == 0 {
-			return "You don't have any gold"
+			return "You don't have any 🟡"
 		}
 		p.Golds--
 		p.Game.Golds++
@@ -129,7 +136,7 @@ func (p *Player) Buy(uuid string) string {
 	p.Golds -= goldNeeded
 	p.Game.Golds += goldNeeded
 	if goldNeeded > 0 {
-		p.Game.Log(fmt.Sprintf("%s pays %d Gold", p.Name, goldNeeded))
+		p.Game.Log(fmt.Sprintf("%s pays %d 🟡", p.Name, goldNeeded))
 	}
 	// 修改分数
 	p.Points += card.Points
@@ -163,7 +170,7 @@ func (p *Player) Reserve(uuid string) string {
 	if p.Game.Golds > 0 {
 		p.Golds++
 		p.Game.Golds--
-		p.Game.Log(fmt.Sprintf("%s takes a Gold", p.Name))
+		p.Game.Log(fmt.Sprintf("%s takes a 🟡", p.Name))
 	}
 	return ""
 }

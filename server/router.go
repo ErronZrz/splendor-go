@@ -1,13 +1,26 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 )
 import "github.com/gin-gonic/gin"
 
+var (
+	ReverseMap = map[string]string{
+		"w": "W",
+		"u": "B",
+		"g": "G",
+		"r": "R",
+		"b": "K",
+		"*": "*",
+	}
+)
+
 func CreateGameRouter(c *gin.Context) {
+	fmt.Println("This is create!")
 	gameId := c.Param("game")
 
 	if _, exists := GameMap[gameId]; exists {
@@ -25,11 +38,12 @@ func CreateGameRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"game":  gameId,
 		"start": manager.UuidStarter,
-		"state": manager.GamePtr,
+		"state": SerializeGame(manager.GamePtr, -1),
 	})
 }
 
 func JoinGameRouter(c *gin.Context) {
+	fmt.Println("This is join!")
 	gameId := c.Param("game")
 
 	manager, exists := GameMap[gameId]
@@ -44,6 +58,7 @@ func JoinGameRouter(c *gin.Context) {
 }
 
 func WatchGameRouter(c *gin.Context) {
+	fmt.Println("This is watch!")
 	gameId := c.Param("game")
 
 	manager, exists := GameMap[gameId]
@@ -58,8 +73,9 @@ func WatchGameRouter(c *gin.Context) {
 }
 
 func StartGameRouter(c *gin.Context) {
+	fmt.Println("This is start!")
 	gameId := c.Param("game")
-	uuidStarter := c.Query("starter")
+	uuidStarter := c.Param("starter")
 
 	manager, exists := GameMap[gameId]
 	if !exists {
@@ -78,6 +94,7 @@ func StartGameRouter(c *gin.Context) {
 }
 
 func ChatRouter(c *gin.Context) {
+	fmt.Println("This is chat!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -95,13 +112,14 @@ func ChatRouter(c *gin.Context) {
 }
 
 func NextGameRouter(c *gin.Context) {
+	fmt.Println("This is next!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
 		return
 	}
 
-	if pid != manager.GamePtr.ActivePlayerIndex {
+	if pid != manager.GamePtr.ActivePlayerId {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Now is not your turn"})
 		return
 	}
@@ -110,34 +128,40 @@ func NextGameRouter(c *gin.Context) {
 	manager.doChange()
 
 	c.JSON(http.StatusOK, gin.H{
-		"state":  manager.GamePtr,
+		"state":  SerializeGame(manager.GamePtr, pid),
 		"result": make(gin.H),
 	})
 }
 
 func ActionRouter(c *gin.Context) {
-	manager, _ := validatePlayer(c)
+	fmt.Println("This is action!")
+	manager, pid := validatePlayer(c)
 
 	if manager == nil {
 		return
 	}
 
-	act := c.Param("act")
+	game := manager.GamePtr
+	if pid != game.ActivePlayerId {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Now is not your turn"})
+		return
+	}
+
+	act := c.Param("action")
 	target := c.Param("target")
 
-	game := manager.GamePtr
-	var result map[string][]string
+	var result gin.H
 
 	switch act {
 	case "take":
-		result = game.Take(target)
+		result = game.Take(ReverseMap[target])
 	case "discard":
-		result = game.Discard(target)
+		result = game.Discard(ReverseMap[target])
 	case "buy":
 		result = game.Buy(target)
 	case "reserve":
 		result = game.Reserve(target)
-	case "visit":
+	case "noble_visit":
 		result = game.VisitNoble(target)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action"})
@@ -145,15 +169,16 @@ func ActionRouter(c *gin.Context) {
 	}
 	if result == nil {
 		manager.doChange()
-		result = make(map[string][]string)
+		result = make(gin.H)
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"state":  game,
+		"state":  SerializeGame(game, pid),
 		"result": result,
 	})
 }
 
 func RenamePlayerRouter(c *gin.Context) {
+	fmt.Println("This is rename!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -171,6 +196,7 @@ func RenamePlayerRouter(c *gin.Context) {
 }
 
 func SuggestRouter(c *gin.Context) {
+	fmt.Println("This is suggest!")
 	word := GetRandomSuggestion()
 	for _, exists := GameMap[word]; exists; {
 		word = GetRandomSuggestion()
@@ -184,15 +210,15 @@ func SuggestRouter(c *gin.Context) {
 }
 
 func StatRouter(c *gin.Context) {
-	manager, _ := validatePlayer(c)
+	manager, pid := validatePlayer(c)
 
 	if manager == nil {
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"state": manager.GamePtr,
-		"chat":  manager.ChatList,
+		"state": SerializeGame(manager.GamePtr, pid),
+		"chat":  SerializeChatList(manager.ChatList),
 	})
 }
 
@@ -210,6 +236,7 @@ func PollRouter(c *gin.Context) {
 }
 
 func ListRouter(c *gin.Context) {
+	fmt.Println("This is list!")
 	for k, manager := range GameMap {
 		// 游戏未开始则 10 分钟后删除
 		if !manager.Started && manager.CreateTime.Add(DeleteWaitingGame*time.Minute).Before(time.Now()) {
@@ -223,12 +250,8 @@ func ListRouter(c *gin.Context) {
 		}
 	}
 	jsonList := make([]gin.H, 0)
-	for k, manager := range GameMap {
-		jsonList = append(jsonList, gin.H{
-			"game":    k,
-			"players": manager.GetPlayerNum(),
-			"started": manager.Started,
-		})
+	for _, manager := range GameMap {
+		jsonList = append(jsonList, SerializeGameManager(manager))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"games": jsonList,
@@ -250,5 +273,5 @@ func validatePlayer(c *gin.Context) (*GameManager, int) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid gameId / pid / uuid"})
 	}
 
-	return manager, -1
+	return manager, pid
 }

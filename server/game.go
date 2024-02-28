@@ -2,56 +2,62 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"math/rand"
 	"time"
 )
 
+var (
+	L1, L2, L3, Nobles = LoadCards()
+)
+
 type Game struct {
-	Players           []*Player
-	PlayerNum         int    `json:"-"`
-	State             string `json:"-"`
-	ActivePlayerIndex int
-	SpectatorIndex    int `json:"-"`
-	Gems              map[string]int
-	Golds             int
-	Table             [][]*DevCard
-	Piles             [][]*DevCard
-	CardMap           map[string]*DevCard `json:"-"`
-	Nobles            []*Noble
-	LastRound         bool `json:"-"`
-	Winner            *Player
-	Records           []string
-	UpdatedTime       time.Time `json:"-"`
+	Players        []*Player
+	PlayerNum      int    `json:"-"`
+	State          string `json:"-"`
+	ActivePlayerId int
+	SpectatorIndex int `json:"-"`
+	Gems           map[string]int
+	Golds          int
+	Table          [][]*DevCard
+	Piles          [][]*DevCard
+	CardMap        map[string]*DevCard `json:"-"`
+	Nobles         []*Noble
+	LastRound      bool `json:"-"`
+	Winner         *Player
+	Records        []gin.H
+	UpdatedTime    time.Time `json:"-"`
 }
 
 func NewGame() *Game {
-	l1, l2, l3, nobles := LoadCards()
-	shuffleCards(l1)
-	shuffleCards(l2)
-	shuffleCards(l3)
+	L1, L2, L3, Nobles = LoadCards()
+	table := make([][]*DevCard, 3)
+	for i := 0; i < 3; i++ {
+		table[i] = make([]*DevCard, 0)
+	}
+	shuffleNobles(Nobles)
 	cardMap := make(map[string]*DevCard, L1Num+L2Num+L3Num)
-	for _, cards := range [][]*DevCard{l1, l2, l3} {
+	for _, cards := range [][]*DevCard{L1, L2, L3} {
 		for _, card := range cards {
 			cardMap[card.Uuid] = card
 		}
 	}
-	shuffleNobles(nobles)
 	g := &Game{
-		Players:           make([]*Player, MaxPlayers),
-		PlayerNum:         0,
-		State:             WaitingState,
-		ActivePlayerIndex: -1,
-		SpectatorIndex:    MaxPlayers,
-		Gems:              make(map[string]int),
-		Golds:             TotalGolds,
-		Table:             [][]*DevCard{l1[:TableSize], l2[:TableSize], l3[:TableSize]},
-		Piles:             [][]*DevCard{l1[TableSize:], l2[TableSize:], l3[TableSize:]},
-		CardMap:           cardMap,
-		Nobles:            nobles,
-		LastRound:         false,
-		Winner:            nil,
-		Records:           make([]string, 0),
-		UpdatedTime:       time.Now(),
+		Players:        make([]*Player, MaxPlayers),
+		PlayerNum:      0,
+		State:          WaitingState,
+		ActivePlayerId: -1,
+		SpectatorIndex: MaxPlayers,
+		Gems:           make(map[string]int),
+		Golds:          TotalGolds,
+		Table:          table,
+		Piles:          [][]*DevCard{L1, L2, L3},
+		CardMap:        cardMap,
+		Nobles:         Nobles[:1],
+		LastRound:      false,
+		Winner:         nil,
+		Records:        make([]gin.H, 0),
+		UpdatedTime:    time.Now(),
 	}
 	return g
 }
@@ -63,6 +69,8 @@ func (g *Game) AddPlayer(name string) (pid int, uuid string) {
 	g.Players[pid] = player
 	g.PlayerNum++
 	uuid = player.Uuid
+	// 添加一个贵族
+	g.Nobles = append(g.Nobles, Nobles[g.PlayerNum])
 	return
 }
 
@@ -88,36 +96,46 @@ func (g *Game) StartGame() bool {
 	for _, color := range ColorList {
 		g.Gems[color] = num
 	}
-	// 选择贵族
-	g.selectNobles()
+	// 处理发展卡
+	shuffleCards(L1)
+	shuffleCards(L2)
+	shuffleCards(L3)
+	g.Table[0] = L1[:TableSize]
+	g.Table[1] = L2[:TableSize]
+	g.Table[2] = L3[:TableSize]
+	g.Piles[0] = L1[TableSize:]
+	g.Piles[1] = L2[TableSize:]
+	g.Piles[2] = L3[TableSize:]
+	// 修改状态
 	g.State = PlayingState
 	g.NextTurn()
 	return true
 }
 
 func (g *Game) NextTurn() {
-	if g.GetActivePlayer().Points >= WinPoints {
+	player := g.GetActivePlayer()
+	if player != nil && player.Points >= WinPoints {
 		g.LastRound = true
 	}
-	g.ActivePlayerIndex = (g.ActivePlayerIndex + 1) % g.PlayerNum
+	g.ActivePlayerId = (g.ActivePlayerId + 1) % g.PlayerNum
 	// 如果已经结束
-	if g.LastRound && g.ActivePlayerIndex == 0 {
+	if g.LastRound && g.ActivePlayerId == 0 {
 		g.State = EndedState
-		g.Winner = g.GetWinner()
-		g.ActivePlayerIndex = -1
+		g.Winner = g.CreateWinner()
+		g.ActivePlayerId = -1
 	}
 	g.GetActivePlayer().StartTurn()
 }
 
 func (g *Game) GetActivePlayer() *Player {
-	index := g.ActivePlayerIndex
+	index := g.ActivePlayerId
 	if index < 0 || index >= g.PlayerNum {
 		return nil
 	}
 	return g.Players[index]
 }
 
-func (g *Game) GetWinner() *Player {
+func (g *Game) CreateWinner() *Player {
 	if g.Winner != nil {
 		return g.Winner
 	}
@@ -133,11 +151,11 @@ func (g *Game) GetWinner() *Player {
 	return winner
 }
 
-func (g *Game) Take(color string) map[string][]string {
+func (g *Game) Take(color string) gin.H {
 	player := g.GetActivePlayer()
 	info := player.Take(color)
 	if info != "" {
-		return map[string][]string{"error": {info}}
+		return gin.H{"error": info}
 	}
 	if player.Finished {
 		g.NextTurn()
@@ -145,20 +163,20 @@ func (g *Game) Take(color string) map[string][]string {
 	return nil
 }
 
-func (g *Game) Discard(color string) map[string][]string {
+func (g *Game) Discard(color string) gin.H {
 	player := g.GetActivePlayer()
 	info := player.Discard(color)
 	if info != "" {
-		return map[string][]string{"error": {info}}
+		return gin.H{"error": info}
 	}
 	return nil
 }
 
-func (g *Game) Buy(uuid string) map[string][]string {
+func (g *Game) Buy(uuid string) gin.H {
 	player := g.GetActivePlayer()
 	info := player.Buy(uuid)
 	if info != "" {
-		return map[string][]string{"error": {info}}
+		return gin.H{"error": info}
 	}
 	// 检查贵族
 	nobles := player.CheckNobles()
@@ -174,28 +192,28 @@ func (g *Game) Buy(uuid string) map[string][]string {
 	for i, n := range nobles {
 		uuids[i] = n.Uuid
 	}
-	return map[string][]string{"nobles": uuids}
+	return gin.H{"nobles": uuids}
 }
 
-func (g *Game) Reserve(uuid string) map[string][]string {
+func (g *Game) Reserve(uuid string) gin.H {
 	player := g.GetActivePlayer()
 	info := player.Reserve(uuid)
 	if info != "" {
-		return map[string][]string{"error": {info}}
+		return gin.H{"error": info}
 	}
 	return nil
 }
 
-func (g *Game) VisitNoble(uuid string) map[string][]string {
+func (g *Game) VisitNoble(uuid string) gin.H {
 	player := g.GetActivePlayer()
 	info := player.VisitNoble(uuid)
 	if info != "" {
-		return map[string][]string{"error": {info}}
+		return gin.H{"error": info}
 	}
 	return g.EndTurn()
 }
 
-func (g *Game) EndTurn() map[string][]string {
+func (g *Game) EndTurn() gin.H {
 	g.NextTurn()
 	return nil
 }
@@ -231,13 +249,12 @@ func (g *Game) RemoveCardFromPiles(level int) *DevCard {
 	return card
 }
 
-func (g *Game) Log(s string) {
-	g.Records = append(g.Records, s)
-}
-
-func (g *Game) selectNobles() {
-	shuffleNobles(g.Nobles)
-	g.Nobles = g.Nobles[:len(g.Players)+1]
+func (g *Game) Log(msg string) {
+	g.Records = append(g.Records, gin.H{
+		"pid":  g.ActivePlayerId,
+		"msg":  msg,
+		"time": time.Now().Format("2006-01-02 15:04:05"),
+	})
 }
 
 func shuffleCards(cards []*DevCard) {
