@@ -13,7 +13,7 @@ func main() {
 	r.POST("/spectate/:game", WatchGameRouter)
 	r.POST("/start/:game/:starter", StartGameRouter)
 	r.POST("/game/:game/chat", ChatRouter)
-	r.POST("/game/:game/next", NextGameRouter)
+	r.POST("/game/:game/next", NextTurnRouter)
 	r.POST("/game/:game/:action/:target", ActionRouter)
 	r.POST("/rename/:game/:name", RenamePlayerRouter)
 	r.GET("/suggest", SuggestRouter)

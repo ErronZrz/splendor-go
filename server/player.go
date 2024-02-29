@@ -18,7 +18,6 @@ type Player struct {
 	Nobles   []*Noble
 	Points   int
 	Taken    map[string]int `json:"-"`
-	Visited  bool           `json:"-"`
 	Finished bool           `json:"-"`
 }
 
@@ -41,7 +40,6 @@ func NewPlayer(game *Game, id int, name string) *Player {
 		Nobles:   make([]*Noble, 0),
 		Points:   0,
 		Taken:    make(map[string]int),
-		Visited:  false,
 		Finished: false,
 	}
 }
@@ -149,6 +147,7 @@ func (p *Player) Buy(uuid string) string {
 	p.Points += card.Points
 	// 记录日志
 	p.Game.Log(log)
+	p.Finished = true
 	return ""
 }
 
@@ -179,7 +178,7 @@ func (p *Player) Reserve(uuid string) string {
 		if !p.Game.RemoveCardFromTable(card) {
 			return "This card is not available"
 		}
-		log = fmt.Sprintf("%s reserves a card: %s", p.Name, card.Caption)
+		log = fmt.Sprintf("%s reserves: %s", p.Name, card.Caption)
 	}
 	p.Reserved = append(p.Reserved, card)
 	// 获取黄金
@@ -189,14 +188,12 @@ func (p *Player) Reserve(uuid string) string {
 		log += ", getting 1🟡"
 	}
 	p.Game.Log(log)
+	p.Finished = true
 	return ""
 }
 
 // VisitNoble 贵族访问
 func (p *Player) VisitNoble(uuid string) string {
-	if p.Visited {
-		return "You have already visited a noble"
-	}
 	nobles := p.CheckNobles()
 	for _, n := range nobles {
 		if n.Uuid == uuid {
@@ -228,7 +225,6 @@ func (p *Player) CheckNobles() []*Noble {
 
 // StartTurn 开始回合
 func (p *Player) StartTurn() {
-	p.Visited = false
 	p.Finished = false
 	p.Taken = make(map[string]int)
 }
@@ -245,7 +241,6 @@ func (p *Player) removeAfterBuying(card *DevCard) (reserved bool) {
 }
 
 func (p *Player) doVisit(noble *Noble) {
-	p.Visited = true
 	// 移除贵族
 	for i, v := range p.Game.Nobles {
 		if v.Uuid == noble.Uuid {
@@ -255,7 +250,7 @@ func (p *Player) doVisit(noble *Noble) {
 	}
 	// 添加贵族
 	p.Nobles = append(p.Nobles, noble)
-	p.Game.Log(fmt.Sprintf("%s visits a noble %s", p.Name, noble.Caption))
+	p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, noble.Caption))
 	// 修改分数
 	p.Points += NoblePoints
 }

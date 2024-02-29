@@ -120,10 +120,11 @@ func (g *Game) NextTurn() {
 	// 如果已经结束
 	if g.LastRound && g.ActivePlayerId == 0 {
 		g.State = EndedState
-		g.Winner = g.CreateWinner()
+		g.Winner = g.DetermineWinner()
 		g.ActivePlayerId = -1
+	} else {
+		g.GetActivePlayer().StartTurn()
 	}
-	g.GetActivePlayer().StartTurn()
 }
 
 func (g *Game) GetActivePlayer() *Player {
@@ -134,13 +135,13 @@ func (g *Game) GetActivePlayer() *Player {
 	return g.Players[index]
 }
 
-func (g *Game) CreateWinner() *Player {
+func (g *Game) DetermineWinner() *Player {
 	if g.Winner != nil {
 		return g.Winner
 	}
 	maxPoints := 0
 	var winner *Player
-	for _, p := range g.Players {
+	for _, p := range g.Players[:g.PlayerNum] {
 		points := p.Points
 		if points >= maxPoints {
 			maxPoints = points
@@ -166,7 +167,7 @@ func (g *Game) Take(color string) gin.H {
 		}
 	}
 	g.Log(log)
-	return g.FinishTurn()
+	return g.CheckingNobleNextTurn()
 }
 
 func (g *Game) Discard(color string) gin.H {
@@ -184,7 +185,7 @@ func (g *Game) Buy(uuid string) gin.H {
 	if info != "" {
 		return gin.H{"error": info}
 	}
-	return g.FinishTurn()
+	return g.CheckingNobleNextTurn()
 }
 
 func (g *Game) Reserve(uuid string) gin.H {
@@ -193,7 +194,7 @@ func (g *Game) Reserve(uuid string) gin.H {
 	if info != "" {
 		return gin.H{"error": info}
 	}
-	return g.FinishTurn()
+	return g.CheckingNobleNextTurn()
 }
 
 func (g *Game) VisitNoble(uuid string) gin.H {
@@ -202,7 +203,9 @@ func (g *Game) VisitNoble(uuid string) gin.H {
 	if info != "" {
 		return gin.H{"error": info}
 	}
-	return g.FinishTurn()
+	// 访问成功则立即结束回合
+	g.NextTurn()
+	return nil
 }
 
 func (g *Game) FindCard(uuid string) *DevCard {
@@ -218,7 +221,7 @@ func (g *Game) RemoveCardFromTable(card *DevCard) bool {
 				g.Table[l][i] = g.Piles[l][0]
 				g.Piles[l] = g.Piles[l][1:]
 			} else {
-				g.Table[l][i] = nil
+				g.Table[l] = append(g.Table[l][:i], g.Table[l][i+1:]...)
 			}
 			return true
 		}
@@ -244,7 +247,7 @@ func (g *Game) Log(msg string) {
 	})
 }
 
-func (g *Game) FinishTurn() gin.H {
+func (g *Game) CheckingNobleNextTurn() gin.H {
 	player := g.GetActivePlayer()
 	// 检查贵族
 	nobles := player.CheckNobles()

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,7 +19,7 @@ var (
 )
 
 func CreateGameRouter(c *gin.Context) {
-	fmt.Println("This is create!")
+	// fmt.Println("This is create!")
 	gameId := c.Param("game")
 
 	if _, exists := GameMap[gameId]; exists {
@@ -43,7 +42,7 @@ func CreateGameRouter(c *gin.Context) {
 }
 
 func JoinGameRouter(c *gin.Context) {
-	fmt.Println("This is join!")
+	// fmt.Println("This is join!")
 	gameId := c.Param("game")
 
 	manager, exists := GameMap[gameId]
@@ -58,7 +57,7 @@ func JoinGameRouter(c *gin.Context) {
 }
 
 func WatchGameRouter(c *gin.Context) {
-	fmt.Println("This is watch!")
+	// fmt.Println("This is watch!")
 	gameId := c.Param("game")
 
 	manager, exists := GameMap[gameId]
@@ -73,7 +72,7 @@ func WatchGameRouter(c *gin.Context) {
 }
 
 func StartGameRouter(c *gin.Context) {
-	fmt.Println("This is start!")
+	// fmt.Println("This is start!")
 	gameId := c.Param("game")
 	uuidStarter := c.Param("starter")
 
@@ -94,7 +93,7 @@ func StartGameRouter(c *gin.Context) {
 }
 
 func ChatRouter(c *gin.Context) {
-	fmt.Println("This is chat!")
+	// fmt.Println("This is chat!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -111,8 +110,8 @@ func ChatRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, manager.Chat(pid, msg))
 }
 
-func NextGameRouter(c *gin.Context) {
-	fmt.Println("This is next!")
+func NextTurnRouter(c *gin.Context) {
+	// fmt.Println("This is next!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -134,7 +133,7 @@ func NextGameRouter(c *gin.Context) {
 }
 
 func ActionRouter(c *gin.Context) {
-	fmt.Println("This is action!")
+	// fmt.Println("This is action!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -178,7 +177,7 @@ func ActionRouter(c *gin.Context) {
 }
 
 func RenamePlayerRouter(c *gin.Context) {
-	fmt.Println("This is rename!")
+	// fmt.Println("This is rename!")
 	manager, pid := validatePlayer(c)
 
 	if manager == nil {
@@ -196,7 +195,7 @@ func RenamePlayerRouter(c *gin.Context) {
 }
 
 func SuggestRouter(c *gin.Context) {
-	fmt.Println("This is suggest!")
+	// fmt.Println("This is suggest!")
 	word := GetRandomSuggestion()
 	for _, exists := GameMap[word]; exists; {
 		word = GetRandomSuggestion()
@@ -236,7 +235,7 @@ func PollRouter(c *gin.Context) {
 }
 
 func ListRouter(c *gin.Context) {
-	fmt.Println("This is list!")
+	// fmt.Println("This is list!")
 	for k, manager := range GameMap {
 		// 游戏未开始则 10 分钟后删除
 		if !manager.Started && manager.CreateTime.Add(DeleteWaitingGame*time.Minute).Before(time.Now()) {

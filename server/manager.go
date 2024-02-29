@@ -157,11 +157,12 @@ func (m *GameManager) doChange() {
 	}
 }
 
-func ValidatePlayer(pid int, playerUuid, gameUuid string) *GameManager {
-	res, exists := GameMap[gameUuid]
+func ValidatePlayer(pid int, playerUuid, gameId string) *GameManager {
+	res, exists := GameMap[gameId]
 	if !exists {
 		return nil
 	}
+	// fmt.Println(res.GamePtr.Players)
 	if pid < 0 || pid >= len(res.GamePtr.Players) {
 		return nil
 	} else if res.GamePtr.Players[pid].Uuid != playerUuid {
