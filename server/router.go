@@ -101,13 +101,16 @@ func ChatRouter(c *gin.Context) {
 	}
 
 	// 从 JSON 请求体中读取 msg 字段
-	var msg string
-	if err := c.ShouldBindJSON(&msg); err != nil {
+	var msgJSON gin.H
+	if err := c.ShouldBindJSON(&msgJSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid msg"})
+		return
+	} else if _, exists := msgJSON["msg"]; !exists {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid msg"})
 		return
 	}
 
-	c.JSON(http.StatusOK, manager.Chat(pid, msg))
+	c.JSON(http.StatusOK, manager.Chat(pid, msgJSON["msg"].(string)))
 }
 
 func NextTurnRouter(c *gin.Context) {
