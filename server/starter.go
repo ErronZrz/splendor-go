@@ -33,7 +33,7 @@ func main() {
 
 	InitSuggestWords()
 
-	err := r.Run(":8080")
+	err := r.Run(":8333")
 	if err != nil {
 		fmt.Println(err)
 	}
