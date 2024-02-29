@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -28,7 +29,7 @@ type GameManager struct {
 	ChatList    []*Chat
 	CreateTime  time.Time
 	Started     bool
-	ChangedChan map[int]chan bool
+	ChangeLock  sync.RWMutex
 }
 
 func NewGameManager(gameId string) *GameManager {
@@ -41,16 +42,23 @@ func NewGameManager(gameId string) *GameManager {
 		ChatList:    make([]*Chat, 0),
 		CreateTime:  time.Now(),
 		Started:     false,
-		ChangedChan: make(map[int]chan bool),
 	}
 }
 
 func (m *GameManager) Poll(pid int) gin.H {
-	// 若状态未改变则继续等待
-	for !m.Changed[pid] {
-		time.Sleep(PollInterval * time.Millisecond)
+	for {
+		m.ChangeLock.RLock()
+		changed := m.Changed[pid]
+		m.ChangeLock.RUnlock()
+		// 若状态未改变则继续等待
+		if !changed {
+			time.Sleep(PollInterval * time.Millisecond)
+		} else {
+			break
+		}
 	}
 	// 若游戏对于该玩家已结束则删除该玩家
+	m.ChangeLock.Lock()
 	if m.Ended[pid] {
 		delete(m.Ended, pid)
 		// 若所有玩家都已结束则删除游戏
@@ -58,8 +66,8 @@ func (m *GameManager) Poll(pid int) gin.H {
 			delete(GameMap, m.GameId)
 		}
 	}
-
 	m.Changed[pid] = false
+	m.ChangeLock.Unlock()
 
 	res := make(gin.H)
 	res["state"] = SerializeGame(m.GamePtr, pid)
@@ -81,8 +89,12 @@ func (m *GameManager) JoinGame() gin.H {
 		}
 	}
 	pid, uid := m.GamePtr.AddPlayer("Player " + strconv.Itoa(num+1))
+
+	m.ChangeLock.Lock()
 	m.Changed[pid] = false
 	m.Ended[pid] = false
+	m.ChangeLock.Unlock()
+
 	m.doChange()
 	return gin.H{
 		"id":   pid,
@@ -92,7 +104,9 @@ func (m *GameManager) JoinGame() gin.H {
 
 func (m *GameManager) WatchGame() gin.H {
 	pid, uid := m.GamePtr.AddSpectator()
+	m.ChangeLock.Lock()
 	m.Changed[pid] = false
+	m.ChangeLock.Unlock()
 	m.doChange()
 	return gin.H{
 		"id":   pid,
@@ -131,6 +145,8 @@ func (m *GameManager) GetPlayerNum() int {
 }
 
 func (m *GameManager) doChange() {
+	m.ChangeLock.Lock()
+	defer m.ChangeLock.Unlock()
 	if m.GamePtr.State == EndedState {
 		for i := range m.Ended {
 			m.Ended[i] = true

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"strings"
 )
 
 type Player struct {
@@ -55,8 +56,8 @@ func (p *Player) TotalGems() int {
 	return valueSum(p.Gems) + p.Golds
 }
 
-// Take 获取宝石
-func (p *Player) Take(color string) string {
+// TakeOne 获取宝石
+func (p *Player) TakeOne(color string) string {
 	if p.Finished {
 		return "You have already acted"
 	} else if p.TotalGems() >= MaxGems {
@@ -73,7 +74,6 @@ func (p *Player) Take(color string) string {
 	p.Game.Gems[color]--
 	p.Gems[color]++
 	p.Taken[color]++
-	p.Game.Log(fmt.Sprintf("%s takes a %s", p.Name, ColorDict[color]))
 	if valueSum(p.Taken) == 3 || p.Taken[color] == 2 {
 		p.Finished = true
 	}
@@ -95,6 +95,7 @@ func (p *Player) Discard(color string) string {
 	p.Gems[color]--
 	p.Game.Gems[color]++
 	p.Taken[color] = max(0, p.Taken[color]-1)
+	p.Game.Log(fmt.Sprintf("%s discards 1%s", p.Name, ColorDict[color]))
 	return ""
 }
 
@@ -118,28 +119,36 @@ func (p *Player) Buy(uuid string) string {
 		}
 		pay[c] = card.Cost[c] - len(p.Cards[c])
 	}
+	log := fmt.Sprintf("%s buys", p.Name)
 	// 移除卡牌
-	p.removeAfterBuying(card)
+	if p.removeAfterBuying(card) {
+		log += " reserved"
+	}
 	// 添加卡牌
 	p.Cards[card.Color] = append(p.Cards[card.Color], card)
-	p.Game.Log(fmt.Sprintf("%s buys a card %s", p.Name, card.Caption))
+	log += fmt.Sprintf(": %s, paying ", card.Caption)
 	// 支付宝石
 	for c, v := range pay {
 		actual := min(p.Gems[c], max(0, v))
 		p.Gems[c] -= actual
 		p.Game.Gems[c] += actual
 		if actual > 0 {
-			p.Game.Log(fmt.Sprintf("%s pays %d %s", p.Name, actual, ColorDict[c]))
+			log += fmt.Sprintf("%d%s", actual, ColorDict[c])
 		}
 	}
 	// 支付黄金
 	p.Golds -= goldNeeded
 	p.Game.Golds += goldNeeded
 	if goldNeeded > 0 {
-		p.Game.Log(fmt.Sprintf("%s pays %d 🟡", p.Name, goldNeeded))
+		log += fmt.Sprintf("%d🟡", goldNeeded)
+	}
+	if log[len(log)-1] == ' ' {
+		log += "nothing"
 	}
 	// 修改分数
 	p.Points += card.Points
+	// 记录日志
+	p.Game.Log(log)
 	return ""
 }
 
@@ -149,29 +158,37 @@ func (p *Player) Reserve(uuid string) string {
 		return "You have already acted"
 	} else if valueSum(p.Taken) > 0 {
 		return "You have already taken gems"
-
 	} else if len(p.Reserved) >= MaxReserve {
 		return "You have already reserved 3 cards"
-
 	} else if p.TotalGems() >= MaxGems && p.Game.Golds > 0 {
 		return "Discard a gem first"
 	}
-	// 预购卡牌
-	card := p.Game.FindCard(uuid)
-	if !p.Game.RemoveCardFromTable(card) {
-		card = p.Game.RemoveCardFromPiles(card.Level)
+	var card *DevCard
+	var log string
+	// 首先检查是否是牌堆中的牌
+	if strings.Contains(uuid, "level") {
+		level := int(uuid[len(uuid)-1] - '0')
+		card = p.Game.RemoveCardFromPiles(level)
 		if card == nil {
-			return fmt.Sprintf("No card left in level %d", card.Level)
+			return fmt.Sprintf("No card left in level %d", level)
 		}
+		log = fmt.Sprintf("%s reserves a card of level %d", p.Name, level)
+	} else {
+		// 否则检查是否是桌上的牌
+		card = p.Game.FindCard(uuid)
+		if !p.Game.RemoveCardFromTable(card) {
+			return "This card is not available"
+		}
+		log = fmt.Sprintf("%s reserves a card: %s", p.Name, card.Caption)
 	}
 	p.Reserved = append(p.Reserved, card)
-	p.Game.Log(fmt.Sprintf("%s reserves a card %s", p.Name, card.Caption))
 	// 获取黄金
 	if p.Game.Golds > 0 {
 		p.Golds++
 		p.Game.Golds--
-		p.Game.Log(fmt.Sprintf("%s takes a 🟡", p.Name))
+		log += ", getting 1🟡"
 	}
+	p.Game.Log(log)
 	return ""
 }
 
@@ -184,6 +201,7 @@ func (p *Player) VisitNoble(uuid string) string {
 	for _, n := range nobles {
 		if n.Uuid == uuid {
 			p.doVisit(n)
+			p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, n.Caption))
 			return ""
 		}
 	}
@@ -215,14 +233,15 @@ func (p *Player) StartTurn() {
 	p.Taken = make(map[string]int)
 }
 
-func (p *Player) removeAfterBuying(card *DevCard) {
+func (p *Player) removeAfterBuying(card *DevCard) (reserved bool) {
 	for i, c := range p.Reserved {
 		if c.Uuid == card.Uuid {
 			p.Reserved = append(p.Reserved[:i], p.Reserved[i+1:]...)
-			return
+			return true
 		}
 	}
 	p.Game.RemoveCardFromTable(card)
+	return false
 }
 
 func (p *Player) doVisit(noble *Noble) {

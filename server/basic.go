@@ -100,8 +100,6 @@ func LoadCards() (l1, l2, l3 []*DevCard, nobles []*Noble) {
 
 // NewDevCard 从字符串创建一张开发卡
 func NewDevCard(level int, color, line string) *DevCard {
-	// 生成说明
-	caption := fmt.Sprintf("(%s) %s", color, line)
 	// 先处理分数
 	n := len(line)
 	var points int
@@ -118,6 +116,11 @@ func NewDevCard(level int, color, line string) *DevCard {
 	for i := 0; i < n; i += 2 {
 		cost[line[i+1:i+2]] = int(line[i] - '0')
 	}
+	var pointStr string
+	if points > 0 {
+		pointStr = fmt.Sprintf("+%d🔸", points)
+	}
+	caption := fmt.Sprintf("(%s%s)[%s]", color, pointStr, line)
 	// 返回
 	return &DevCard{
 		Uuid:    uuid.New().String(),
@@ -138,11 +141,12 @@ func NewNoble(seq int, line string) *Noble {
 	for i := 0; i < len(line); i += 2 {
 		cost[line[i+1:i+2]] = int(line[i] - '0')
 	}
+	caption := fmt.Sprintf("(+3🔸)[%s]", BeautifyCaption(line))
 	return &Noble{
 		Uuid:     uuid.New().String(),
 		Sequence: seq,
 		Cost:     cost,
-		Caption:  BeautifyCaption(line),
+		Caption:  caption,
 	}
 }
 
@@ -171,9 +175,9 @@ func GetRandomSuggestion() string {
 	return SuggestWords[rand.Intn(len(SuggestWords))]
 }
 
-func BeautifyCaption(line string) string {
+func BeautifyCaption(str string) string {
 	for _, c := range ColorList {
-		line = strings.ReplaceAll(line, c, ColorDict[c])
+		str = strings.ReplaceAll(str, c, ColorDict[c])
 	}
-	return line
+	return str
 }

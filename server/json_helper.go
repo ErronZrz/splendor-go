@@ -29,7 +29,7 @@ func SerializeDevCard(d *DevCard) gin.H {
 func SerializeHiddenDevCard(d *DevCard) gin.H {
 	return gin.H{
 		"uuid":  d.Uuid,
-		"level": d.Level,
+		"level": "level" + strconv.Itoa(d.Level),
 	}
 }
 
