@@ -27,6 +27,7 @@ type Game struct {
 	Winner         *Player
 	Records        []gin.H
 	UpdatedTime    time.Time `json:"-"`
+	BeginPlayerId  int       `json:"-"`
 }
 
 // NewGame 创建新游戏
@@ -176,10 +177,16 @@ func (g *Game) VisitNobleActively(uuid string) gin.H {
 // NextTurn 下一个回合
 func (g *Game) NextTurn() gin.H {
 	player := g.getActivePlayer()
-	// 在此处统一修改 Finished
-	if player != nil {
-		player.Finished = true
+	// 若当前玩家为空则开始游戏
+	if player == nil {
+		// 随机挑选一个玩家先手
+		g.BeginPlayerId = rand.Intn(g.PlayerNum)
+		g.ActivePlayerId = g.BeginPlayerId
+		g.getActivePlayer().StartTurn()
+		return nil
 	}
+	// 在此处统一修改 Finished
+	player.Finished = true
 	// 如果本回合拿过宝石则记录
 	logTakenGems(player)
 	// 检查贵族，如果有多个贵族则暂不跳过回合，否则结束回合
@@ -188,13 +195,13 @@ func (g *Game) NextTurn() gin.H {
 		return nobles
 	}
 	// 检查是否触发最后一回合
-	if player != nil && player.Points >= WinPoints {
+	if player.Points >= WinPoints {
 		g.LastRound = true
 	}
 	// 下一个玩家
 	g.ActivePlayerId = (g.ActivePlayerId + 1) % g.PlayerNum
 	// 如果已经结束
-	if g.LastRound && g.ActivePlayerId == 0 {
+	if g.LastRound && g.ActivePlayerId == g.BeginPlayerId {
 		g.State = EndedState
 		g.Winner = g.determineWinner()
 		g.ActivePlayerId = -1
@@ -215,7 +222,7 @@ func (g *Game) Log(msg string) {
 
 func (g *Game) checkingNobleAndAutoVisit() gin.H {
 	player := g.getActivePlayer()
-	if player == nil || player.Visited {
+	if player.Visited {
 		return nil
 	}
 	// 检查贵族
@@ -260,9 +267,6 @@ func (g *Game) determineWinner() *Player {
 }
 
 func logTakenGems(p *Player) {
-	if p == nil {
-		return
-	}
 	sum := p.TakenNum()
 	if sum == 0 {
 		return
