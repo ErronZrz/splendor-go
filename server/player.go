@@ -65,8 +65,8 @@ func (p *Player) TakeOne(color string) string {
 	p.Game.Gems[color]--
 	p.Gems[color]++
 	p.Taken[color]++
-	if p.TakenNum() == 3 || p.Taken[color] == 2 {
-		p.Finished = true
+	if p.TakenNum() < 3 && p.Taken[color] < 2 {
+		return "continue"
 	}
 	return ""
 }
@@ -146,7 +146,6 @@ func (p *Player) Buy(uuid string) string {
 	p.Points += card.Points
 	// 记录日志
 	p.Game.Log(log)
-	p.Finished = true
 	return ""
 }
 
@@ -168,7 +167,7 @@ func (p *Player) Reserve(uuid string) string {
 		level := int(uuid[len(uuid)-1] - '0')
 		card = p.takeCardFromPile(level)
 		if card == nil {
-			return fmt.Sprintf("No card left in level %d", level)
+			return "No card left in this pile"
 		}
 		log = fmt.Sprintf("%s reserves a card of level %d", p.Name, level)
 	} else {
@@ -187,7 +186,6 @@ func (p *Player) Reserve(uuid string) string {
 		log += ", getting 1🟡"
 	}
 	p.Game.Log(log)
-	p.Finished = true
 	return ""
 }
 

@@ -120,11 +120,10 @@ func (g *Game) StartGame() bool {
 func (g *Game) Take(color string) gin.H {
 	player := g.getActivePlayer()
 	info := player.TakeOne(color)
-	if info != "" {
-		return gin.H{"error": info}
-	}
-	if !player.Finished {
+	if info == "continue" {
 		return nil
+	} else if info != "" {
+		return gin.H{"error": info}
 	}
 	return g.NextTurn()
 }
@@ -177,6 +176,10 @@ func (g *Game) VisitNobleActively(uuid string) gin.H {
 // NextTurn 下一个回合
 func (g *Game) NextTurn() gin.H {
 	player := g.getActivePlayer()
+	// 在此处统一修改 Finished
+	if player != nil {
+		player.Finished = true
+	}
 	// 如果本回合拿过宝石则记录
 	logTakenGems(player)
 	// 检查贵族，如果有多个贵族则暂不跳过回合，否则结束回合
