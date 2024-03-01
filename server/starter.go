@@ -31,7 +31,7 @@ func main() {
 		c.File("./static" + c.Param("filepath"))
 	})
 
-	InitSuggestWords()
+	InitRoomWords()
 
 	err := r.Run(":8333")
 	if err != nil {

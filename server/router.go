@@ -8,7 +8,7 @@ import (
 import "github.com/gin-gonic/gin"
 
 var (
-	ReverseMap = map[string]string{
+	ReqColorMap = map[string]string{
 		"w": "W",
 		"u": "B",
 		"g": "G",
@@ -18,6 +18,7 @@ var (
 	}
 )
 
+// CreateGameRouter 创建游戏
 func CreateGameRouter(c *gin.Context) {
 	// fmt.Println("This is create!")
 	gameId := c.Param("game")
@@ -41,6 +42,7 @@ func CreateGameRouter(c *gin.Context) {
 	})
 }
 
+// JoinGameRouter 加入游戏
 func JoinGameRouter(c *gin.Context) {
 	// fmt.Println("This is join!")
 	gameId := c.Param("game")
@@ -56,6 +58,7 @@ func JoinGameRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, manager.JoinGame())
 }
 
+// WatchGameRouter 观战游戏
 func WatchGameRouter(c *gin.Context) {
 	// fmt.Println("This is watch!")
 	gameId := c.Param("game")
@@ -71,6 +74,7 @@ func WatchGameRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, manager.WatchGame())
 }
 
+// StartGameRouter 开始游戏
 func StartGameRouter(c *gin.Context) {
 	// fmt.Println("This is start!")
 	gameId := c.Param("game")
@@ -92,6 +96,7 @@ func StartGameRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, manager.StartGame())
 }
 
+// ChatRouter 聊天
 func ChatRouter(c *gin.Context) {
 	// fmt.Println("This is chat!")
 	manager, pid := validatePlayer(c)
@@ -113,6 +118,7 @@ func ChatRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, manager.Chat(pid, msgJSON["msg"].(string)))
 }
 
+// NextTurnRouter 下一个回合
 func NextTurnRouter(c *gin.Context) {
 	// fmt.Println("This is next!")
 	manager, pid := validatePlayer(c)
@@ -127,7 +133,7 @@ func NextTurnRouter(c *gin.Context) {
 	}
 
 	manager.GamePtr.NextTurn()
-	manager.doChange()
+	manager.ChangeStatus()
 
 	c.JSON(http.StatusOK, gin.H{
 		"state":  SerializeGame(manager.GamePtr, pid),
@@ -135,6 +141,7 @@ func NextTurnRouter(c *gin.Context) {
 	})
 }
 
+// ActionRouter 游戏操作
 func ActionRouter(c *gin.Context) {
 	// fmt.Println("This is action!")
 	manager, pid := validatePlayer(c)
@@ -156,21 +163,21 @@ func ActionRouter(c *gin.Context) {
 
 	switch act {
 	case "take":
-		result = game.Take(ReverseMap[target])
+		result = game.Take(ReqColorMap[target])
 	case "discard":
-		result = game.Discard(ReverseMap[target])
+		result = game.Discard(ReqColorMap[target])
 	case "buy":
 		result = game.Buy(target)
 	case "reserve":
 		result = game.Reserve(target)
 	case "noble_visit":
-		result = game.VisitNoble(target)
+		result = game.VisitNobleActively(target)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action"})
 		return
 	}
 	if result == nil {
-		manager.doChange()
+		manager.ChangeStatus()
 		result = make(gin.H)
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -179,6 +186,7 @@ func ActionRouter(c *gin.Context) {
 	})
 }
 
+// RenamePlayerRouter 重命名玩家
 func RenamePlayerRouter(c *gin.Context) {
 	// fmt.Println("This is rename!")
 	manager, pid := validatePlayer(c)
@@ -189,7 +197,7 @@ func RenamePlayerRouter(c *gin.Context) {
 
 	name := c.Param("name")
 	manager.GamePtr.RenamePlayer(pid, name)
-	manager.doChange()
+	manager.ChangeStatus()
 
 	c.JSON(http.StatusOK, gin.H{
 		// why?
@@ -197,11 +205,12 @@ func RenamePlayerRouter(c *gin.Context) {
 	})
 }
 
+// SuggestRouter 建议游戏名
 func SuggestRouter(c *gin.Context) {
 	// fmt.Println("This is suggest!")
-	word := GetRandomSuggestion()
+	word := randomSuggestion()
 	for _, exists := GameMap[word]; exists; {
-		word = GetRandomSuggestion()
+		word = randomSuggestion()
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -211,6 +220,7 @@ func SuggestRouter(c *gin.Context) {
 	})
 }
 
+// StatRouter 游戏状态
 func StatRouter(c *gin.Context) {
 	manager, pid := validatePlayer(c)
 
@@ -224,6 +234,7 @@ func StatRouter(c *gin.Context) {
 	})
 }
 
+// PollRouter 轮询游戏状态
 func PollRouter(c *gin.Context) {
 	manager, pid := validatePlayer(c)
 
@@ -237,6 +248,7 @@ func PollRouter(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// ListRouter 游戏列表
 func ListRouter(c *gin.Context) {
 	// fmt.Println("This is list!")
 	for k, manager := range GameMap {
@@ -269,7 +281,7 @@ func validatePlayer(c *gin.Context) (*GameManager, int) {
 	}
 	uid := c.Query("uuid")
 
-	manager := ValidatePlayer(pid, uid, gameId)
+	manager := queryManager(pid, uid, gameId)
 
 	if manager == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid gameId / pid / uuid"})

@@ -29,6 +29,7 @@ type Game struct {
 	UpdatedTime    time.Time `json:"-"`
 }
 
+// NewGame 创建新游戏
 func NewGame() *Game {
 	L1, L2, L3, loadedNobles := LoadCards()
 	shuffleNobles(loadedNobles)
@@ -65,6 +66,7 @@ func NewGame() *Game {
 	return g
 }
 
+// AddPlayer 添加玩家并返回其编号和 UUID
 func (g *Game) AddPlayer(name string) (pid int, uuid string) {
 	pid = g.PlayerNum
 	player := NewPlayer(g, pid, name)
@@ -77,10 +79,12 @@ func (g *Game) AddPlayer(name string) (pid int, uuid string) {
 	return
 }
 
+// RenamePlayer 重命名玩家
 func (g *Game) RenamePlayer(pid int, name string) {
 	g.Players[pid].Name = name
 }
 
+// AddSpectator 添加观众并返回其编号和 UUID
 func (g *Game) AddSpectator() (sid int, uuid string) {
 	sid = g.SpectatorIndex
 	spectator := NewPlayer(g, sid, fmt.Sprintf("Spec-%d", sid))
@@ -90,6 +94,7 @@ func (g *Game) AddSpectator() (sid int, uuid string) {
 	return
 }
 
+// StartGame 开始游戏
 func (g *Game) StartGame() bool {
 	if g.PlayerNum < 2 {
 		return false
@@ -111,23 +116,113 @@ func (g *Game) StartGame() bool {
 	return true
 }
 
+// Take 宝石拿取
+func (g *Game) Take(color string) gin.H {
+	player := g.getActivePlayer()
+	info := player.TakeOne(color)
+	if info != "" {
+		return gin.H{"error": info}
+	}
+	if !player.Finished {
+		return nil
+	}
+	return g.checkingNobleNextTurn()
+}
+
+// Discard 宝石丢弃
+func (g *Game) Discard(color string) gin.H {
+	player := g.getActivePlayer()
+	info := player.Discard(color)
+	if info != "" {
+		return gin.H{"error": info}
+	}
+	return nil
+}
+
+// Buy 购买发展卡
+func (g *Game) Buy(uuid string) gin.H {
+	player := g.getActivePlayer()
+	info := player.Buy(uuid)
+	if info != "" {
+		return gin.H{"error": info}
+	}
+	return g.checkingNobleNextTurn()
+}
+
+// Reserve 预定发展卡
+func (g *Game) Reserve(uuid string) gin.H {
+	player := g.getActivePlayer()
+	info := player.Reserve(uuid)
+	if info != "" {
+		return gin.H{"error": info}
+	}
+	return g.checkingNobleNextTurn()
+}
+
+// VisitNobleActively 主动访问贵族
+func (g *Game) VisitNobleActively(uuid string) gin.H {
+	player := g.getActivePlayer()
+	info := player.TryVisitNoble(uuid)
+	if info != "" {
+		return gin.H{"error": info}
+	}
+	// 手动访问成功则立即结束回合
+	g.NextTurn()
+	return nil
+}
+
+// NextTurn 下一个回合
 func (g *Game) NextTurn() {
-	player := g.GetActivePlayer()
+	player := g.getActivePlayer()
+	// 检查该玩家本回合是否拿过宝石
+	logTakenGems(player)
+	// 检查是否触发最后一回合
 	if player != nil && player.Points >= WinPoints {
 		g.LastRound = true
 	}
+	// 下一个玩家
 	g.ActivePlayerId = (g.ActivePlayerId + 1) % g.PlayerNum
 	// 如果已经结束
 	if g.LastRound && g.ActivePlayerId == 0 {
 		g.State = EndedState
-		g.Winner = g.DetermineWinner()
+		g.Winner = g.determineWinner()
 		g.ActivePlayerId = -1
 	} else {
-		g.GetActivePlayer().StartTurn()
+		g.getActivePlayer().StartTurn()
 	}
 }
 
-func (g *Game) GetActivePlayer() *Player {
+// Log 记录日志
+func (g *Game) Log(msg string) {
+	g.Records = append(g.Records, gin.H{
+		"pid":  g.ActivePlayerId,
+		"msg":  msg,
+		"time": time.Now().Format("2006-01-02 15:04:05"),
+	})
+}
+
+func (g *Game) checkingNobleNextTurn() gin.H {
+	player := g.getActivePlayer()
+	// 检查贵族
+	nobles := player.CheckNobles()
+	// 有多个贵族，返回贵族信息，暂时不跳过回合
+	if len(nobles) > 1 {
+		uuids := make([]string, len(nobles))
+		for i, n := range nobles {
+			uuids[i] = n.Uuid
+		}
+		return gin.H{"nobles": uuids}
+	}
+	// 有一个贵族则自动访问
+	if len(nobles) == 1 {
+		player.DoVisit(nobles[0])
+	}
+	// 轮到下一个玩家
+	g.NextTurn()
+	return nil
+}
+
+func (g *Game) getActivePlayer() *Player {
 	index := g.ActivePlayerId
 	if index < 0 || index >= g.PlayerNum {
 		return nil
@@ -135,7 +230,7 @@ func (g *Game) GetActivePlayer() *Player {
 	return g.Players[index]
 }
 
-func (g *Game) DetermineWinner() *Player {
+func (g *Game) determineWinner() *Player {
 	if g.Winner != nil {
 		return g.Winner
 	}
@@ -151,121 +246,21 @@ func (g *Game) DetermineWinner() *Player {
 	return winner
 }
 
-func (g *Game) Take(color string) gin.H {
-	player := g.GetActivePlayer()
-	info := player.TakeOne(color)
-	if info != "" {
-		return gin.H{"error": info}
+func logTakenGems(p *Player) {
+	if p == nil {
+		return
 	}
-	if !player.Finished {
-		return nil
+	sum := p.TakenNum()
+	if sum == 0 {
+		return
 	}
-	log := fmt.Sprintf("%s takes %d gems: ", player.Name, valueSum(player.Taken))
-	for c, n := range player.Taken {
+	log := fmt.Sprintf("%s takes %d gems: ", p.Name, sum)
+	for c, n := range p.Taken {
 		if n > 0 {
 			log += fmt.Sprintf("%d%s ", n, ColorDict[c])
 		}
 	}
-	g.Log(log)
-	return g.CheckingNobleNextTurn()
-}
-
-func (g *Game) Discard(color string) gin.H {
-	player := g.GetActivePlayer()
-	info := player.Discard(color)
-	if info != "" {
-		return gin.H{"error": info}
-	}
-	return nil
-}
-
-func (g *Game) Buy(uuid string) gin.H {
-	player := g.GetActivePlayer()
-	info := player.Buy(uuid)
-	if info != "" {
-		return gin.H{"error": info}
-	}
-	return g.CheckingNobleNextTurn()
-}
-
-func (g *Game) Reserve(uuid string) gin.H {
-	player := g.GetActivePlayer()
-	info := player.Reserve(uuid)
-	if info != "" {
-		return gin.H{"error": info}
-	}
-	return g.CheckingNobleNextTurn()
-}
-
-func (g *Game) VisitNoble(uuid string) gin.H {
-	player := g.GetActivePlayer()
-	info := player.VisitNoble(uuid)
-	if info != "" {
-		return gin.H{"error": info}
-	}
-	// 访问成功则立即结束回合
-	g.NextTurn()
-	return nil
-}
-
-func (g *Game) FindCard(uuid string) *DevCard {
-	return g.CardMap[uuid]
-}
-
-func (g *Game) RemoveCardFromTable(card *DevCard) bool {
-	l := card.Level - 1
-	uuid := card.Uuid
-	for i, c := range g.Table[l] {
-		if c.Uuid == uuid {
-			if len(g.Piles[l]) > 0 {
-				g.Table[l][i] = g.Piles[l][0]
-				g.Piles[l] = g.Piles[l][1:]
-			} else {
-				g.Table[l] = append(g.Table[l][:i], g.Table[l][i+1:]...)
-			}
-			return true
-		}
-	}
-	return false
-}
-
-func (g *Game) RemoveCardFromPiles(level int) *DevCard {
-	l := level - 1
-	if len(g.Piles[l]) == 0 {
-		return nil
-	}
-	card := g.Piles[l][0]
-	g.Piles[l] = g.Piles[l][1:]
-	return card
-}
-
-func (g *Game) Log(msg string) {
-	g.Records = append(g.Records, gin.H{
-		"pid":  g.ActivePlayerId,
-		"msg":  msg,
-		"time": time.Now().Format("2006-01-02 15:04:05"),
-	})
-}
-
-func (g *Game) CheckingNobleNextTurn() gin.H {
-	player := g.GetActivePlayer()
-	// 检查贵族
-	nobles := player.CheckNobles()
-	// 有多个贵族，返回贵族信息
-	if len(nobles) > 1 {
-		uuids := make([]string, len(nobles))
-		for i, n := range nobles {
-			uuids[i] = n.Uuid
-		}
-		return gin.H{"nobles": uuids}
-	}
-	// 有一个贵族则自动访问
-	if len(nobles) == 1 {
-		player.doVisit(nobles[0])
-	}
-	// 轮到下一个玩家
-	g.NextTurn()
-	return nil
+	p.Game.Log(log)
 }
 
 func shuffleCards(cards []*DevCard) {

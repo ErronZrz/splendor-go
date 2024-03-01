@@ -32,6 +32,7 @@ type GameManager struct {
 	ChangeLock  sync.RWMutex
 }
 
+// NewGameManager 创建新游戏管理器
 func NewGameManager(gameId string) *GameManager {
 	return &GameManager{
 		GameId:      gameId,
@@ -45,6 +46,7 @@ func NewGameManager(gameId string) *GameManager {
 	}
 }
 
+// Poll 轮询游戏状态
 func (m *GameManager) Poll(pid int) gin.H {
 	for {
 		m.ChangeLock.RLock()
@@ -77,6 +79,7 @@ func (m *GameManager) Poll(pid int) gin.H {
 	return res
 }
 
+// JoinGame 加入游戏
 func (m *GameManager) JoinGame() gin.H {
 	num := m.GetPlayerNum()
 	if num >= MaxPlayers {
@@ -95,29 +98,31 @@ func (m *GameManager) JoinGame() gin.H {
 	m.Ended[pid] = false
 	m.ChangeLock.Unlock()
 
-	m.doChange()
+	m.ChangeStatus()
 	return gin.H{
 		"id":   pid,
 		"uuid": uid,
 	}
 }
 
+// WatchGame 观战游戏
 func (m *GameManager) WatchGame() gin.H {
 	pid, uid := m.GamePtr.AddSpectator()
 	m.ChangeLock.Lock()
 	m.Changed[pid] = false
 	m.ChangeLock.Unlock()
-	m.doChange()
+	m.ChangeStatus()
 	return gin.H{
 		"id":   pid,
 		"uuid": uid,
 	}
 }
 
+// StartGame 开始游戏
 func (m *GameManager) StartGame() gin.H {
 	if m.GamePtr.StartGame() {
 		m.Started = true
-		m.doChange()
+		m.ChangeStatus()
 		return make(gin.H)
 	}
 	return gin.H{
@@ -125,6 +130,7 @@ func (m *GameManager) StartGame() gin.H {
 	}
 }
 
+// Chat 发送消息
 func (m *GameManager) Chat(pid int, msg string) gin.H {
 	m.ChatList = append(m.ChatList, &Chat{
 		Pid:      pid,
@@ -132,7 +138,7 @@ func (m *GameManager) Chat(pid int, msg string) gin.H {
 		Msg:      msg,
 		SendTime: time.Now(),
 	})
-	m.doChange()
+	m.ChangeStatus()
 	return gin.H{
 		"state":  SerializeGame(m.GamePtr, pid),
 		"result": make(gin.H),
@@ -140,11 +146,8 @@ func (m *GameManager) Chat(pid int, msg string) gin.H {
 	}
 }
 
-func (m *GameManager) GetPlayerNum() int {
-	return m.GamePtr.PlayerNum
-}
-
-func (m *GameManager) doChange() {
+// ChangeStatus 修改状态
+func (m *GameManager) ChangeStatus() {
 	m.ChangeLock.Lock()
 	defer m.ChangeLock.Unlock()
 	if m.GamePtr.State == EndedState {
@@ -157,7 +160,12 @@ func (m *GameManager) doChange() {
 	}
 }
 
-func ValidatePlayer(pid int, playerUuid, gameId string) *GameManager {
+// GetPlayerNum 获取玩家数量
+func (m *GameManager) GetPlayerNum() int {
+	return m.GamePtr.PlayerNum
+}
+
+func queryManager(pid int, playerUuid, gameId string) *GameManager {
 	res, exists := GameMap[gameId]
 	if !exists {
 		return nil

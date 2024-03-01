@@ -59,6 +59,7 @@ type Noble struct {
 	Caption  string
 }
 
+// LoadCards 从文件加载所有卡牌和贵族
 func LoadCards() (l1, l2, l3 []*DevCard, nobles []*Noble) {
 	l1 = make([]*DevCard, L1Num)
 	l2 = make([]*DevCard, L2Num)
@@ -81,25 +82,46 @@ func LoadCards() (l1, l2, l3 []*DevCard, nobles []*Noble) {
 	// 读取
 	for i := 0; i < L1Num; i++ {
 		scanner.Scan()
-		l1[i] = NewDevCard(1, ColorList[i/8], scanner.Text())
+		l1[i] = newDevCard(1, ColorList[i/8], scanner.Text())
 	}
 	for i := 0; i < L2Num; i++ {
 		scanner.Scan()
-		l2[i] = NewDevCard(2, ColorList[i/6], scanner.Text())
+		l2[i] = newDevCard(2, ColorList[i/6], scanner.Text())
 	}
 	for i := 0; i < L3Num; i++ {
 		scanner.Scan()
-		l3[i] = NewDevCard(3, ColorList[i/4], scanner.Text())
+		l3[i] = newDevCard(3, ColorList[i/4], scanner.Text())
 	}
 	for i := 0; i < NobleNum; i++ {
 		scanner.Scan()
-		nobles[i] = NewNoble(i, scanner.Text())
+		nobles[i] = newNoble(i, scanner.Text())
 	}
 	return
 }
 
-// NewDevCard 从字符串创建一张开发卡
-func NewDevCard(level int, color, line string) *DevCard {
+// InitRoomWords 从文件加载所有提示词
+func InitRoomWords() {
+	// 打开 ../resources/words.txt
+	file, err := os.Open("resources/words.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(file)
+	// 创建读取器
+	scanner := bufio.NewScanner(file)
+	// 读取
+	for scanner.Scan() {
+		SuggestWords = append(SuggestWords, scanner.Text())
+	}
+}
+
+func newDevCard(level int, color, line string) *DevCard {
 	// 先处理分数
 	n := len(line)
 	var points int
@@ -128,12 +150,11 @@ func NewDevCard(level int, color, line string) *DevCard {
 		Color:   color,
 		Points:  points,
 		Cost:    cost,
-		Caption: BeautifyCaption(caption),
+		Caption: beautifyCaption(caption),
 	}
 }
 
-// NewNoble 从字符串创建一个贵族
-func NewNoble(seq int, line string) *Noble {
+func newNoble(seq int, line string) *Noble {
 	cost := make(map[string]int)
 	for _, c := range ColorList {
 		cost[c] = 0
@@ -141,7 +162,7 @@ func NewNoble(seq int, line string) *Noble {
 	for i := 0; i < len(line); i += 2 {
 		cost[line[i+1:i+2]] = int(line[i] - '0')
 	}
-	caption := fmt.Sprintf("(+3🔸)[%s]", BeautifyCaption(line))
+	caption := fmt.Sprintf("(+3🔸)[%s]", beautifyCaption(line))
 	return &Noble{
 		Uuid:     uuid.New().String(),
 		Sequence: seq,
@@ -150,32 +171,11 @@ func NewNoble(seq int, line string) *Noble {
 	}
 }
 
-func InitSuggestWords() {
-	// 打开 ../resources/words.txt
-	file, err := os.Open("resources/words.txt")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(file)
-	// 创建读取器
-	scanner := bufio.NewScanner(file)
-	// 读取
-	for scanner.Scan() {
-		SuggestWords = append(SuggestWords, scanner.Text())
-	}
-}
-
-func GetRandomSuggestion() string {
+func randomSuggestion() string {
 	return SuggestWords[rand.Intn(len(SuggestWords))]
 }
 
-func BeautifyCaption(str string) string {
+func beautifyCaption(str string) string {
 	for _, c := range ColorList {
 		str = strings.ReplaceAll(str, c, ColorDict[c])
 	}

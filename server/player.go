@@ -21,6 +21,7 @@ type Player struct {
 	Finished bool           `json:"-"`
 }
 
+// NewPlayer 创建新玩家
 func NewPlayer(game *Game, id int, name string) *Player {
 	gems := make(map[string]int)
 	cards := make(map[string][]*DevCard)
@@ -44,35 +45,25 @@ func NewPlayer(game *Game, id int, name string) *Player {
 	}
 }
 
-// Power 计算玩家某颜色的购买力
-func (p *Player) Power(color string) int {
-	return len(p.Cards[color]) + p.Gems[color]
-}
-
-// TotalGems 计算玩家宝石总数
-func (p *Player) TotalGems() int {
-	return valueSum(p.Gems) + p.Golds
-}
-
-// TakeOne 获取宝石
+// TakeOne 拿取宝石
 func (p *Player) TakeOne(color string) string {
 	if p.Finished {
 		return "You have already acted"
-	} else if p.TotalGems() >= MaxGems {
+	} else if p.totalGems() >= MaxGems {
 		return "You already have 10 gems"
 	} else if color == GoldKey {
 		return "You can't take a 🟡"
 	} else if p.Game.Gems[color] == 0 {
 		return fmt.Sprintf("No %s left", ColorDict[color])
+	} else if p.Taken[color] == 1 && p.TakenNum() == 2 {
+		return "You have already taken 2 different gems"
 	} else if p.Taken[color] == 1 && p.Game.Gems[color] < 3 {
 		return fmt.Sprintf("There are not enough %s left", ColorDict[color])
-	} else if p.Taken[color] == 1 && valueSum(p.Taken) == 2 {
-		return "You have already taken 2 different gems"
 	}
 	p.Game.Gems[color]--
 	p.Gems[color]++
 	p.Taken[color]++
-	if valueSum(p.Taken) == 3 || p.Taken[color] == 2 {
+	if p.TakenNum() == 3 || p.Taken[color] == 2 {
 		p.Finished = true
 	}
 	return ""
@@ -92,8 +83,11 @@ func (p *Player) Discard(color string) string {
 	}
 	p.Gems[color]--
 	p.Game.Gems[color]++
-	p.Taken[color] = max(0, p.Taken[color]-1)
-	p.Game.Log(fmt.Sprintf("%s discards 1%s", p.Name, ColorDict[color]))
+	if p.Taken[color] > 0 {
+		p.Taken[color]--
+	} else {
+		p.Game.Log(fmt.Sprintf("%s discards 1%s", p.Name, ColorDict[color]))
+	}
 	return ""
 }
 
@@ -101,16 +95,16 @@ func (p *Player) Discard(color string) string {
 func (p *Player) Buy(uuid string) string {
 	if p.Finished {
 		return "You have already acted"
-	} else if valueSum(p.Taken) > 0 {
+	} else if p.TakenNum() > 0 {
 		return "You have already taken gems"
 	}
-	card := p.Game.FindCard(uuid)
+	card := p.findCard(uuid)
 	pay := make(map[string]int)
 	var goldNeeded int
 	// 计算需要支付的宝石
 	for _, c := range ColorList {
-		if card.Cost[c] > p.Power(c) {
-			goldNeeded += card.Cost[c] - p.Power(c)
+		if card.Cost[c] > p.powerOf(c) {
+			goldNeeded += card.Cost[c] - p.powerOf(c)
 			if goldNeeded > p.Golds {
 				return "Not enough gems"
 			}
@@ -119,20 +113,23 @@ func (p *Player) Buy(uuid string) string {
 	}
 	log := fmt.Sprintf("%s buys", p.Name)
 	// 移除卡牌
-	if p.removeAfterBuying(card) {
+	if p.removeCardAfterBuying(card) {
 		log += " reserved"
 	}
 	// 添加卡牌
 	p.Cards[card.Color] = append(p.Cards[card.Color], card)
 	log += fmt.Sprintf(": %s, paying ", card.Caption)
 	// 支付宝石
-	for c, v := range pay {
-		actual := min(p.Gems[c], max(0, v))
-		p.Gems[c] -= actual
-		p.Game.Gems[c] += actual
-		if actual > 0 {
-			log += fmt.Sprintf("%d%s", actual, ColorDict[c])
+	for c, num := range pay {
+		if num <= 0 {
+			continue
 		}
+		if p.Gems[c] < num {
+			num = p.Gems[c]
+		}
+		p.Gems[c] -= num
+		p.Game.Gems[c] += num
+		log += fmt.Sprintf("%d%s", num, ColorDict[c])
 	}
 	// 支付黄金
 	p.Golds -= goldNeeded
@@ -155,11 +152,11 @@ func (p *Player) Buy(uuid string) string {
 func (p *Player) Reserve(uuid string) string {
 	if p.Finished {
 		return "You have already acted"
-	} else if valueSum(p.Taken) > 0 {
+	} else if p.TakenNum() > 0 {
 		return "You have already taken gems"
 	} else if len(p.Reserved) >= MaxReserve {
 		return "You have already reserved 3 cards"
-	} else if p.TotalGems() >= MaxGems && p.Game.Golds > 0 {
+	} else if p.totalGems() >= MaxGems && p.Game.Golds > 0 {
 		return "Discard a gem first"
 	}
 	var card *DevCard
@@ -167,15 +164,15 @@ func (p *Player) Reserve(uuid string) string {
 	// 首先检查是否是牌堆中的牌
 	if strings.Contains(uuid, "level") {
 		level := int(uuid[len(uuid)-1] - '0')
-		card = p.Game.RemoveCardFromPiles(level)
+		card = p.takeCardFromPile(level)
 		if card == nil {
 			return fmt.Sprintf("No card left in level %d", level)
 		}
 		log = fmt.Sprintf("%s reserves a card of level %d", p.Name, level)
 	} else {
 		// 否则检查是否是桌上的牌
-		card = p.Game.FindCard(uuid)
-		if !p.Game.RemoveCardFromTable(card) {
+		card = p.findCard(uuid)
+		if !p.removeCardFromTable(card) {
 			return "This card is not available"
 		}
 		log = fmt.Sprintf("%s reserves: %s", p.Name, card.Caption)
@@ -192,12 +189,12 @@ func (p *Player) Reserve(uuid string) string {
 	return ""
 }
 
-// VisitNoble 贵族访问
-func (p *Player) VisitNoble(uuid string) string {
+// TryVisitNoble 尝试访问贵族
+func (p *Player) TryVisitNoble(uuid string) string {
 	nobles := p.CheckNobles()
 	for _, n := range nobles {
 		if n.Uuid == uuid {
-			p.doVisit(n)
+			p.DoVisit(n)
 			p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, n.Caption))
 			return ""
 		}
@@ -223,24 +220,8 @@ func (p *Player) CheckNobles() []*Noble {
 	return nobles
 }
 
-// StartTurn 开始回合
-func (p *Player) StartTurn() {
-	p.Finished = false
-	p.Taken = make(map[string]int)
-}
-
-func (p *Player) removeAfterBuying(card *DevCard) (reserved bool) {
-	for i, c := range p.Reserved {
-		if c.Uuid == card.Uuid {
-			p.Reserved = append(p.Reserved[:i], p.Reserved[i+1:]...)
-			return true
-		}
-	}
-	p.Game.RemoveCardFromTable(card)
-	return false
-}
-
-func (p *Player) doVisit(noble *Noble) {
+// DoVisit 执行访问贵族
+func (p *Player) DoVisit(noble *Noble) {
 	// 移除贵族
 	for i, v := range p.Game.Nobles {
 		if v.Uuid == noble.Uuid {
@@ -253,6 +234,69 @@ func (p *Player) doVisit(noble *Noble) {
 	p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, noble.Caption))
 	// 修改分数
 	p.Points += NoblePoints
+}
+
+// StartTurn 开始回合
+func (p *Player) StartTurn() {
+	p.Finished = false
+	p.Taken = make(map[string]int)
+}
+
+// TakenNum 返回玩家在本回合已拿取的宝石数量
+func (p *Player) TakenNum() int {
+	return valueSum(p.Taken)
+}
+
+func (p *Player) powerOf(color string) int {
+	return len(p.Cards[color]) + p.Gems[color]
+}
+
+func (p *Player) totalGems() int {
+	return valueSum(p.Gems) + p.Golds
+}
+
+func (p *Player) findCard(uuid string) *DevCard {
+	return p.Game.CardMap[uuid]
+}
+
+func (p *Player) removeCardAfterBuying(card *DevCard) (reserved bool) {
+	for i, c := range p.Reserved {
+		if c.Uuid == card.Uuid {
+			p.Reserved = append(p.Reserved[:i], p.Reserved[i+1:]...)
+			return true
+		}
+	}
+	p.removeCardFromTable(card)
+	return false
+}
+
+func (p *Player) removeCardFromTable(card *DevCard) bool {
+	g := p.Game
+	l := card.Level - 1
+	uid := card.Uuid
+	for i, c := range g.Table[l] {
+		if c.Uuid == uid {
+			if len(g.Piles[l]) > 0 {
+				g.Table[l][i] = g.Piles[l][0]
+				g.Piles[l] = g.Piles[l][1:]
+			} else {
+				g.Table[l] = append(g.Table[l][:i], g.Table[l][i+1:]...)
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Player) takeCardFromPile(level int) *DevCard {
+	g := p.Game
+	l := level - 1
+	if len(g.Piles[l]) == 0 {
+		return nil
+	}
+	card := g.Piles[l][0]
+	g.Piles[l] = g.Piles[l][1:]
+	return card
 }
 
 func valueSum(m map[string]int) int {
