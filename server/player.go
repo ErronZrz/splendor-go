@@ -18,6 +18,7 @@ type Player struct {
 	Nobles   []*Noble
 	Points   int
 	Taken    map[string]int `json:"-"`
+	Visited  bool           `json:"-"`
 	Finished bool           `json:"-"`
 }
 
@@ -41,6 +42,7 @@ func NewPlayer(game *Game, id int, name string) *Player {
 		Nobles:   make([]*Noble, 0),
 		Points:   0,
 		Taken:    make(map[string]int),
+		Visited:  false,
 		Finished: false,
 	}
 }
@@ -189,19 +191,6 @@ func (p *Player) Reserve(uuid string) string {
 	return ""
 }
 
-// TryVisitNoble 尝试访问贵族
-func (p *Player) TryVisitNoble(uuid string) string {
-	nobles := p.CheckNobles()
-	for _, n := range nobles {
-		if n.Uuid == uuid {
-			p.DoVisit(n)
-			p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, n.Caption))
-			return ""
-		}
-	}
-	return "You can't visit this noble"
-}
-
 // CheckNobles 检查能够访问的贵族
 func (p *Player) CheckNobles() []*Noble {
 	var nobles []*Noble
@@ -234,11 +223,14 @@ func (p *Player) DoVisit(noble *Noble) {
 	p.Game.Log(fmt.Sprintf("%s visits a noble: %s", p.Name, noble.Caption))
 	// 修改分数
 	p.Points += NoblePoints
+	// 标记已访问
+	p.Visited = true
 }
 
 // StartTurn 开始回合
 func (p *Player) StartTurn() {
 	p.Finished = false
+	p.Visited = false
 	p.Taken = make(map[string]int)
 }
 

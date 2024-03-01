@@ -126,7 +126,7 @@ func (g *Game) Take(color string) gin.H {
 	if !player.Finished {
 		return nil
 	}
-	return g.checkingNobleNextTurn()
+	return g.NextTurn()
 }
 
 // Discard 宝石丢弃
@@ -146,7 +146,7 @@ func (g *Game) Buy(uuid string) gin.H {
 	if info != "" {
 		return gin.H{"error": info}
 	}
-	return g.checkingNobleNextTurn()
+	return g.NextTurn()
 }
 
 // Reserve 预定发展卡
@@ -156,26 +156,34 @@ func (g *Game) Reserve(uuid string) gin.H {
 	if info != "" {
 		return gin.H{"error": info}
 	}
-	return g.checkingNobleNextTurn()
+	return g.NextTurn()
 }
 
 // VisitNobleActively 主动访问贵族
 func (g *Game) VisitNobleActively(uuid string) gin.H {
 	player := g.getActivePlayer()
-	info := player.TryVisitNoble(uuid)
-	if info != "" {
-		return gin.H{"error": info}
+	nobles := player.CheckNobles()
+	for _, n := range nobles {
+		if n.Uuid == uuid {
+			player.DoVisit(n)
+			return g.NextTurn()
+		}
 	}
-	// 手动访问成功则立即结束回合
-	g.NextTurn()
-	return nil
+	return gin.H{
+		"error": "You can't visit this noble",
+	}
 }
 
 // NextTurn 下一个回合
-func (g *Game) NextTurn() {
+func (g *Game) NextTurn() gin.H {
 	player := g.getActivePlayer()
-	// 检查该玩家本回合是否拿过宝石
+	// 如果本回合拿过宝石则记录
 	logTakenGems(player)
+	// 检查贵族，如果有多个贵族则暂不跳过回合，否则结束回合
+	nobles := g.checkingNobleAndAutoVisit()
+	if nobles != nil {
+		return nobles
+	}
 	// 检查是否触发最后一回合
 	if player != nil && player.Points >= WinPoints {
 		g.LastRound = true
@@ -190,6 +198,7 @@ func (g *Game) NextTurn() {
 	} else {
 		g.getActivePlayer().StartTurn()
 	}
+	return nil
 }
 
 // Log 记录日志
@@ -201,8 +210,11 @@ func (g *Game) Log(msg string) {
 	})
 }
 
-func (g *Game) checkingNobleNextTurn() gin.H {
+func (g *Game) checkingNobleAndAutoVisit() gin.H {
 	player := g.getActivePlayer()
+	if player == nil || player.Visited {
+		return nil
+	}
 	// 检查贵族
 	nobles := player.CheckNobles()
 	// 有多个贵族，返回贵族信息，暂时不跳过回合
@@ -217,8 +229,6 @@ func (g *Game) checkingNobleNextTurn() gin.H {
 	if len(nobles) == 1 {
 		player.DoVisit(nobles[0])
 	}
-	// 轮到下一个玩家
-	g.NextTurn()
 	return nil
 }
 
@@ -260,6 +270,8 @@ func logTakenGems(p *Player) {
 			log += fmt.Sprintf("%d%s ", n, ColorDict[c])
 		}
 	}
+	// 此处清空 Taken 是为了防止一回合中重复记录，且由于 Finished=true，玩家无法继续拿宝石
+	p.Taken = make(map[string]int)
 	p.Game.Log(log)
 }
 
