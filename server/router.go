@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -54,6 +55,11 @@ func JoinGameRouter(c *gin.Context) {
 		})
 		return
 	}
+
+	// 打印加入游戏的日志
+	timeStr := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] Game \"%s\" joined (%d players)\n",
+		timeStr, gameId, 1+manager.GetPlayerNum())
 
 	c.JSON(http.StatusOK, manager.JoinGame())
 }
