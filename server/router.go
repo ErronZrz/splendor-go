@@ -61,7 +61,7 @@ func JoinGameRouter(c *gin.Context) {
 	// 打印加入游戏的日志
 	timeStr := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Printf("[%s] Game \"%s\" joined (%d players)\n",
-		timeStr, gameId, 1+manager.GetPlayerNum())
+		timeStr, gameId, manager.GetPlayerNum())
 }
 
 // WatchGameRouter 观战游戏
