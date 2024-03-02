@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"strconv"
@@ -171,7 +172,8 @@ func queryManager(pid int, playerUuid, gameId string) *GameManager {
 		return nil
 	}
 	// fmt.Println(res.GamePtr.Players)
-	if pid < 0 || pid >= len(res.GamePtr.Players) {
+	if pid < 0 || pid >= len(res.GamePtr.Players) || res.GamePtr.Players[pid] == nil {
+		fmt.Printf("Players=%v, pid=%d\n", res.GamePtr.Players, pid)
 		return nil
 	} else if res.GamePtr.Players[pid].Uuid != playerUuid {
 		return nil

@@ -114,6 +114,10 @@ func (g *Game) StartGame() bool {
 	// 修改状态
 	g.State = PlayingState
 	g.NextTurn()
+	// 打印贵族
+	for _, noble := range LoadedNobles {
+		fmt.Println(noble.Caption)
+	}
 	return true
 }
 
@@ -254,9 +258,10 @@ func (g *Game) determineWinner() *Player {
 	if g.Winner != nil {
 		return g.Winner
 	}
-	maxPoints := 0
+	var maxPoints int
 	var winner *Player
-	for _, p := range g.Players[:g.PlayerNum] {
+	for i := 0; i < g.PlayerNum; i++ {
+		p := g.Players[(i+g.BeginPlayerId)%g.PlayerNum]
 		points := p.Points
 		if points >= maxPoints {
 			maxPoints = points
