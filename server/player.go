@@ -123,11 +123,11 @@ func (p *Player) Buy(uuid string) string {
 	log += fmt.Sprintf(": %s, paying ", card.Caption)
 	// 支付宝石
 	for c, num := range pay {
-		if num <= 0 {
-			continue
-		}
 		if p.Gems[c] < num {
 			num = p.Gems[c]
+		}
+		if num <= 0 {
+			continue
 		}
 		p.Gems[c] -= num
 		p.Game.Gems[c] += num

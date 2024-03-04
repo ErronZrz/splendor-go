@@ -279,7 +279,7 @@ func logTakenGems(p *Player) {
 	log := fmt.Sprintf("%s takes %d gems: ", p.Name, sum)
 	for c, n := range p.Taken {
 		if n > 0 {
-			log += fmt.Sprintf("%d%s ", n, ColorDict[c])
+			log += fmt.Sprintf("%d%s", n, ColorDict[c])
 		}
 	}
 	// 此处清空 Taken 是为了防止一回合中重复记录，且由于 Finished=true，玩家无法继续拿宝石
