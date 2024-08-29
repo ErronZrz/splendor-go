@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-var (
-	LoadedNobles []*Noble
-)
-
 type Game struct {
 	Players        []*Player
 	PlayerNum      int    `json:"-"`
@@ -23,7 +19,8 @@ type Game struct {
 	Piles          [][]*DevCard
 	CardMap        map[string]*DevCard `json:"-"`
 	Nobles         []*Noble
-	LastRound      bool `json:"-"`
+	AllNobles      []*Noble `json:"-"`
+	LastRound      bool     `json:"-"`
 	Winner         *Player
 	Records        []gin.H
 	UpdatedTime    time.Time `json:"-"`
@@ -34,7 +31,6 @@ type Game struct {
 func NewGame() *Game {
 	L1, L2, L3, loadedNobles := LoadCards()
 	shuffleNobles(loadedNobles)
-	LoadedNobles = loadedNobles
 
 	table := make([][]*DevCard, 3)
 	for i := 0; i < 3; i++ {
@@ -59,6 +55,7 @@ func NewGame() *Game {
 		Piles:          piles,
 		CardMap:        cardMap,
 		Nobles:         loadedNobles[:1],
+		AllNobles:      loadedNobles,
 		LastRound:      false,
 		Winner:         nil,
 		Records:        make([]gin.H, 0),
@@ -76,7 +73,7 @@ func (g *Game) AddPlayer(name string) (pid int, uuid string) {
 	g.PlayerNum++
 	uuid = player.Uuid
 	// 添加一个贵族
-	g.Nobles = append(g.Nobles, LoadedNobles[g.PlayerNum])
+	g.Nobles = g.AllNobles[:g.PlayerNum+1]
 	return
 }
 
@@ -115,7 +112,7 @@ func (g *Game) StartGame() bool {
 	g.State = PlayingState
 	g.NextTurn()
 	// 打印贵族
-	for _, noble := range LoadedNobles {
+	for _, noble := range g.AllNobles {
 		fmt.Println(noble.Caption)
 	}
 	return true
