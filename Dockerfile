@@ -8,6 +8,9 @@ WORKDIR /app
 COPY go.mod .
 COPY go.sum .
 
+# 设置 GOPROXY 环境变量
+ENV GOPROXY=https://goproxy.cn,direct
+
 # 下载依赖
 RUN go mod download
 
