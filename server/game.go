@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"math/rand"
+	"sync"
 	"time"
 )
 
 type Game struct {
+	sync.Mutex
 	Players        []*Player
 	PlayerNum      int    `json:"-"`
 	State          string `json:"-"`

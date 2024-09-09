@@ -157,6 +157,10 @@ func ActionRouter(c *gin.Context) {
 	}
 
 	game := manager.GamePtr
+	// 加锁防止并发问题
+	game.Lock()
+	defer game.Unlock()
+
 	if pid != game.ActivePlayerId {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Now is not your turn"})
 		return
